@@ -17,11 +17,14 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Build and push image (sha + latest)
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v5
         env:
           IMAGE: ${{ secrets.DOCKER_USERNAME }}/myapp
           TAG: ${{ github.sha }}
-        run: |
-          docker build -t $IMAGE:latest -t $IMAGE:$TAG .
-          docker push $IMAGE:$TAG
-          docker push $IMAGE:latest
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/myapp:latest
+            ${{ secrets.DOCKER_USERNAME }}/myapp:${{ github.sha }}
