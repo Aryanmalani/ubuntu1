@@ -1,0 +1,86 @@
+name: Deploy to IIS on Windows Runner
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Deploy website to IIS
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Stop IIS website if it exists
+        shell: powershell
+        run: |
+          Import-Module WebAdministration
+          if (Test-Path "IIS:\Sites\MyWebsite") {
+            Write-Host "Stopping MyWebsite..."
+            Stop-Website -Name "MyWebsite"
+          } else {
+            Write-Host "MyWebsite does not exist, skipping stop."
+          }
+
+      - name: Clear existing IIS folder
+        shell: powershell
+        run: |
+          $path = "C:\inetpub\wwwroot"
+          Write-Host "Clearing IIS folder: $path"
+          if (Test-Path $path) {
+            Remove-Item -Path "$path\*" -Recurse -Force -ErrorAction SilentlyContinue
+          }
+
+      - name: Copy new website files
+        shell: powershell
+        run: |
+          $source = "${{ github.workspace }}"
+          $destination = "C:\inetpub\wwwroot"
+
+          Write-Host "Copying files from $source to $destination"
+
+          # Create destination folder if missing
+          if (-not (Test-Path $destination)) {
+            New-Item -ItemType Directory -Path $destination -Force | Out-Null
+          }
+
+          # Copy everything except GitHub workflow folder
+          Get-ChildItem -Path $source -Recurse -Force |
+            Where-Object { $_.FullName -notlike "*\.git*" -and $_.FullName -notlike "*\.github*" } |
+            Copy-Item -Destination $destination -Recurse -Force
+
+          Write-Host "Files copied."
+
+      - name: Create IIS website and app pool if missing
+        shell: powershell
+        run: |
+          Import-Module WebAdministration
+
+          $siteName = "MyWebsite"
+          $sitePath = "C:\inetpub\wwwroot"
+          $poolName = "MyWebsiteAppPool"
+
+          # Create App Pool if missing
+          if (-not (Test-Path "IIS:\AppPools\$poolName")) {
+            Write-Host "Creating app pool: $poolName"
+            New-WebAppPool -Name $poolName
+          }
+
+          # Create Website if missing
+          if (-not (Test-Path "IIS:\Sites\$siteName")) {
+            Write-Host "Creating website: $siteName"
+            New-Website -Name $siteName -Port 80 -PhysicalPath $sitePath -ApplicationPool $poolName
+          } else {
+            Write-Host "Website already exists."
+          }
+
+      - name: Start IIS website
+        shell: powershell
+        run: |
+          Import-Module WebAdministration
+          Write-Host "Starting IIS website..."
+          Start-Website -Name "MyWebsite"
+          Write-Host "Deployment complete."
