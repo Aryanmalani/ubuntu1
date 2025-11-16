@@ -1,0 +1,48 @@
+name: Push-to-EC2
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Deploy to EC2 on main branch push
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      # Upload files to EC2 using SSH Deploy
+      - name: Upload files to EC2
+        uses: easingthemes/ssh-deploy@main
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
+          REMOTE_HOST: ${{ secrets.HOST_DNS }}
+          REMOTE_USER: ${{ secrets.USERNAME }}
+          TARGET: ${{ secrets.TARGET_DIR }}
+
+      # Run commands on EC2 after upload
+      - name: Run remote commands on EC2
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.HOST_DNS }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            # Update system and install Apache
+            sudo apt-get update -y
+            sudo apt-get install -y apache2
+
+            # Ensure Apache is running
+            sudo systemctl enable apache2
+            sudo systemctl restart apache2
+
+            # Move uploaded files into Apache directory
+            sudo rm -rf /var/www/html/*
+            sudo cp -r ${{ secrets.TARGET_DIR }}/* /var/www/html/
+
+            # Set proper permissions
+            sudo chown -R www-data:www-data /var/www/html
+            sudo chmod -R 755 /var/www/html
